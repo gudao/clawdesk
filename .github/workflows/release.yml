@@ -10,7 +10,7 @@ jobs:
   build:
     permissions:
       contents: write # 创建 Release、上传 Assets
-      releases: write # 创建/编辑 Release（部分仓库设置需要显式声明）
+
     strategy:
       fail-fast: false
       matrix:
