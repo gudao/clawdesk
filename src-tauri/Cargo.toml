@@ -1,0 +1,36 @@
+[package]
+name = "clawdesk"
+version = "0.1.0"
+description = "ClawDesk - OpenClaw GUI Manager"
+authors = []
+license = ""
+repository = ""
+default-run = "clawdesk"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "clawdesk_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-store = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+which = "7"
+dirs = "5"
+reqwest = { version = "0.12", features = ["json"] }
+semver = "1"
+
+[features]
+# This feature is used for production builds or when a dev server is not specified.
+# Do not remove this feature; it disables the dev server and uses static files.
+custom-protocol = ["tauri/custom-protocol"]

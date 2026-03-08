@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*" # 推送 v0.1.0 这类标签时触发
+  workflow_dispatch: # 也可以手动触发
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── macOS (universal: Intel + Apple Silicon) ──
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            os_name: mac
+
+          # ── Windows x64 ──
+          - platform: windows-latest
+            args: ""
+            os_name: win
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      # ── 检出代码 ──
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 安装 Node ──
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      # ── 安装 Rust ──
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # macOS universal binary 需要同时支持两个 target
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      # ── 缓存 Rust 编译产物 (加速) ──
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      # ── 安装前端依赖 ──
+      - name: Install frontend deps
+        run: npm ci
+
+      # ── 构建 & 打包 ──
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ── macOS 代码签名（可选，没有证书时留空即可本地跑通）──
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # ── Windows 代码签名（可选）──
+          # WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          # WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "ClawDesk ${{ github.ref_name }}"
+          releaseBody: |
+            ## ClawDesk ${{ github.ref_name }}
+
+            ### 下载
+            | 平台 | 文件 | 说明 |
+            |------|------|------|
+            | macOS | `ClawDesk_*_universal.dmg` | Intel + Apple Silicon 通用包 |
+            | Windows | `ClawDesk_*_x64-setup.exe` | 64 位 NSIS 安装包 |
+
+            ### 安装
+            - **macOS**: 打开 `.dmg`，将 ClawDesk 拖入应用程序文件夹
+            - **Windows**: 双击 `.exe` 按向导安装
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
