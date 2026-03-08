@@ -5,12 +5,12 @@ on:
     tags:
       - "v*" # 推送 v0.1.0 这类标签时触发
   workflow_dispatch: # 手动触发
-  permissions:
-    contents: write
-    packages: write
 
 jobs:
   build:
+    permissions:
+      contents: write # 创建 Release、上传 Assets
+      releases: write # 创建/编辑 Release（部分仓库设置需要显式声明）
     strategy:
       fail-fast: false
       matrix:
