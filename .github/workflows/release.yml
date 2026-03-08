@@ -3,8 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - "v*" # 推送 v0.1.0 这类标签时触发
-  workflow_dispatch: # 也可以手动触发
+      - "v*"          # 推送 v0.1.0 这类标签时触发
+  workflow_dispatch:  # 手动触发
 
 jobs:
   build:
@@ -12,14 +12,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ── macOS (universal: Intel + Apple Silicon) ──
-          - platform: macos-latest
-            args: "--target universal-apple-darwin"
+          # ── macOS universal (Intel + Apple Silicon) ──
+          # 用 macos-13 而非 macos-latest：macOS 15 与 universal build 有兼容问题
+          - platform: macos-13
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            tauri_args: --target universal-apple-darwin
             os_name: mac
 
           # ── Windows x64 ──
           - platform: windows-latest
-            args: ""
+            rust_targets: ""
+            tauri_args: ""
             os_name: win
 
     runs-on: ${{ matrix.platform }}
@@ -29,36 +32,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 安装 Node ──
+      # ── Node 20 ──
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
+          cache: npm
 
-      # ── 安装 Rust ──
-      - name: Setup Rust (stable)
+      # ── Rust stable ──
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          # macOS universal binary 需要同时支持两个 target
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.rust_targets }}
 
-      # ── 缓存 Rust 编译产物 (加速) ──
+      # ── 缓存 Rust 编译（加速后续构建）──
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "src-tauri -> target"
+          workspaces: src-tauri -> target
 
       # ── 安装前端依赖 ──
       - name: Install frontend deps
         run: npm ci
 
-      # ── 构建 & 打包 ──
-      - name: Build Tauri app
+      # ── 生成图标 ──
+      - name: Install rsvg-convert (macOS)
+        if: matrix.os_name == 'mac'
+        run: brew install librsvg
+
+      - name: Install ImageMagick (Windows)
+        if: matrix.os_name == 'win'
+        run: choco install imagemagick -y
+        shell: pwsh
+
+      - name: Generate icons
+        run: node scripts/gen-icons.mjs
+
+      # ── Tauri 构建 & 发布 ──
+      - name: Build & Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ── macOS 代码签名（可选，没有证书时留空即可本地跑通）──
+          # ── macOS 代码签名（可选）──
           # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -74,7 +89,6 @@ jobs:
           releaseBody: |
             ## ClawDesk ${{ github.ref_name }}
 
-            ### 下载
             | 平台 | 文件 | 说明 |
             |------|------|------|
             | macOS | `ClawDesk_*_universal.dmg` | Intel + Apple Silicon 通用包 |
@@ -83,6 +97,8 @@ jobs:
             ### 安装
             - **macOS**: 打开 `.dmg`，将 ClawDesk 拖入应用程序文件夹
             - **Windows**: 双击 `.exe` 按向导安装
+
+            > macOS 用户首次打开时若提示"无法验证开发者"，请右键→打开 或前往 系统设置→隐私与安全→仍要打开
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.tauri_args }}
